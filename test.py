@@ -1,19 +1,19 @@
 from sqlalchemy import create_engine, text
+import mysql.connector
 
-db = {
-        'user' : 'root',
-        'password' : 'test1234',
-        'host' : 'localhost',
-        'port' : 3306,
-        'database' : 'miniter'
-}
-
-db_url = f"mysql+mysqlconnector://{username}:{password}@{host}:{port}/{database}?charset=utf8"
-db = create_engine(db_url, encoding = 'utf-8', max_overflow = 0)
-
-params = {'name' : '이정환'}
-rows = db.execute(text("SELECT * FROM users WHERE name = :name"),params).fetchall()
-
-for row in rows:
-    print(f"name : {row['name']}")
-    print(f"email : {row['email']}")
+db = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        passwd="DLwjdghks139@",
+        database="miniter"
+)
+user = { 'name' : 'junghwan', 'email':'123@gmail.com', 'profile':'hola', 'password':'teset12'}
+cur = db.cursor()
+sql = """insert into users(name,email,profile,hashed_password) values (%s, %s, %s, %s)"""
+cur.execute(sql,(
+                'junghwan',
+                '123@gmail.com',
+                'hola',
+                'teset12'
+        )   
+)
