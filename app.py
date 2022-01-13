@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request, current_app
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
-    
+import bcrypt
+import jwt
 
 class CustomJSONEncoder(JSONEncoder):
     def default(self, obj):
@@ -132,15 +133,60 @@ def create_app(test_config = None):
     def search_id():
         id = request.json
         user_info = get_user_id(id)
+
         return jsonify(user_info)
 
     @app.route("/sign-up", methods=['POST'])
     def sign_up():
         new_user = request.json
-        new_user_id = insert_user(new_user)
-        new_user = get_user(new_user_id)
+        new_user['password'] = bcrypt.hashpw(
+            new_user['password'].encode('UTF-8'),
+            bcrypt.gensalt()
+        )
+        new_user_id =app.database.execute(text("""
+            INSERT INTO users (
+                name,
+                email,
+                profile,
+                hashed_password
+            )VALUES (
+                :name,
+                :email,
+                :profile,
+                :password
+            )   
+        """),new_user).lastrowid
+        new_user_info = get_user(new_user_id)
+        return jsonify(new_user_info)
 
-        return jsonify(new_user)
+    @app.route("/login", methods=['POST'])
+    def login():
+        credential = request.json
+        email = credential['email']
+        password = credential['password']
+
+        row = database.execute(text(""".
+            SELECT
+                id,
+                hashed_password
+            FROM users
+            WHERE email = :email
+        """),{'email':email}).fetchone()
+
+        if row and bcrypt.checkpw(password.encode('UTF-8'),row['hashed_password'].encode('UTF-8')):
+            user_id = row['id']
+            payload = {
+                'user_id' : user_id,
+                'exp' : datetime.utcnow() + timedelta(seconds = 60 * 60 * 24)
+            }
+            tocken=jwt.encode(payload, app.config['JWT_SECRET_KEY'],'HS256')
+
+            return jsonify({
+                'access_token' : token.decode('UTF-8')
+            })
+        else:
+            return '',401
+
 
 
     @app.route("/tweet", methods=['POST'])
