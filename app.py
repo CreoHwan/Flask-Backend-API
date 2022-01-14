@@ -1,14 +1,42 @@
-from flask import Flask, jsonify, request, current_app
+from flask import Flask, jsonify, request, current_app, Response, g
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
+from functools import wraps
+from datetime import datetime, timedelta
 import bcrypt
 import jwt
+
 
 class CustomJSONEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, set):    return list(obj)
 
         return JSONEncoder.default(self,obj)
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # args: 일반 파라미터 ex) 10 20
+        # kwargs: 키워드 파라미터 ex) x=100
+        access_token = request.headers.get('Authorization')
+        if access_token is not None:
+            try:
+                payload = jwt.decode(access_token, current_app.config['JWT_SECRET_KEY'], 'HS256')
+            except jwt.InvalidTokenError:
+                payload=None
+
+            if payload is None: return Response(status=401)
+
+            user_id = payload['user_id']
+            # g 객체에 정보를 안전하게 저장할 수 있다
+            g.user_id = user_id
+            g.user = get_user(user_id) if user_id else None
+
+        else:
+            return Response(status = 401)
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_user(user_id):
     user = current_app.database.execute(text("""
@@ -110,6 +138,20 @@ def get_timeline(user_id):
         'tweet' : tweet['tweet']
     } for tweet in timeline]
 
+def get_user_id_and_password(email):
+    row = current_app.database.execute(text("""
+        SELECT
+            id,
+            hashed_password
+        FROM users
+        WHERE email = :email
+    """),{'email' : email}).fetchone()
+
+    return {
+        'id': row['id'],
+        'hashed_password' : row['hashed_password']
+    } if row else None
+
 
 def create_app(test_config = None):
     app = Flask(__name__)
@@ -122,7 +164,6 @@ def create_app(test_config = None):
     database = create_engine(app.config['DB_URL'], encoding = 'utf-8', max_overflow = 0)
 
     app.database = database
-
 
 
     @app.route("/ping", methods=['GET'])
@@ -143,46 +184,28 @@ def create_app(test_config = None):
             new_user['password'].encode('UTF-8'),
             bcrypt.gensalt()
         )
-        new_user_id =app.database.execute(text("""
-            INSERT INTO users (
-                name,
-                email,
-                profile,
-                hashed_password
-            )VALUES (
-                :name,
-                :email,
-                :profile,
-                :password
-            )   
-        """),new_user).lastrowid
-        new_user_info = get_user(new_user_id)
-        return jsonify(new_user_info)
+        
+        new_user_id = insert_user(new_user)
+        new_user = get_user(new_user_id)
+        return jsonify(new_user)
 
     @app.route("/login", methods=['POST'])
     def login():
         credential = request.json
         email = credential['email']
         password = credential['password']
-
-        row = database.execute(text(""".
-            SELECT
-                id,
-                hashed_password
-            FROM users
-            WHERE email = :email
-        """),{'email':email}).fetchone()
-
-        if row and bcrypt.checkpw(password.encode('UTF-8'),row['hashed_password'].encode('UTF-8')):
-            user_id = row['id']
+        user_credential = get_user_id_and_password(email)
+        
+        if user_credential and bcrypt.checkpw(password.encode('UTF-8'), user_credential['hashed_password'].encode('UTF-8')):
+            user_id = user_credential['id']
             payload = {
                 'user_id' : user_id,
                 'exp' : datetime.utcnow() + timedelta(seconds = 60 * 60 * 24)
             }
-            tocken=jwt.encode(payload, app.config['JWT_SECRET_KEY'],'HS256')
+            token=jwt.encode(payload, app.config['JWT_SECRET_KEY'],'HS256')
 
             return jsonify({
-                'access_token' : token.decode('UTF-8')
+                'access_token' : token.encode('UTF-8').decode('UTF-8')
             })
         else:
             return '',401
@@ -190,8 +213,10 @@ def create_app(test_config = None):
 
 
     @app.route("/tweet", methods=['POST'])
+    @login_required
     def tweet():
         user_tweet = request.json
+        user_tweet['id'] = g.user_id
         tweet = user_tweet['tweet']
 
         if len(tweet) > 300:
@@ -202,15 +227,19 @@ def create_app(test_config = None):
 
 
     @app.route("/follow", methods=['POST'])
+    @login_required
     def follow():
         payload = request.json
+        payload['id'] = g.user_id
         insert_follow(payload)
         return '', 200
 
                 
     @app.route("/unfollow", methods=['POST'])
+    @login_required
     def unfollow():
         payload = request.json
+        payload['id'] = g.user_id
         insert_unfollow(payload)
         return '', 200
         
