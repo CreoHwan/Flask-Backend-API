@@ -10,7 +10,7 @@ class TweetDao:
         user_id,
         tweet
       ) VALUES (
-        :user_id,
+        :id,
         :tweet
       )
     """), {
@@ -21,7 +21,7 @@ class TweetDao:
   def get_timeline(self, user_id):
     timeline = self.db.execute(text("""
       SELECT
-        t.user_id
+        t.user_id,
         t.tweet
       FROM tweets t
       LEFT JOIN users_follow_list ufl ON ufl.user_id=:user_id

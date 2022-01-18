@@ -19,7 +19,7 @@ def login_required(f):
     access_token = request.headers.get('Authorization')
     if access_token is not None:
       try:
-        payload = jwt.decode(access_token, current_app.config['HWT_SECRET_KEY'], 'HS256')
+        payload = jwt.decode(access_token, current_app.config['JWT_SECRET_KEY'], 'HS256')
       except jwt.InvalidTokenError:
         payload = None
 
@@ -104,7 +104,7 @@ def create_endpoints(app, service):
 
   @app.route('/timeline/<int:user_id>', methods=['GET'])
   def timeline(user_id):
-    timeline = tweet_service.get_timeline(user_id)
+    timeline = tweet_service.timeline(user_id)
 
     return jsonify({
       'user_id':user_id,
@@ -114,7 +114,7 @@ def create_endpoints(app, service):
   @app.route('/timeline', methods=['GET'])
   @login_required
   def user_timeline():
-    timeline = tweet_service.get_timeline(g.user_id)
+    timeline = tweet_service.timeline(g.user_id)
     return jsonify({
       'user_id':g.user_id,
       'timeline':timeline

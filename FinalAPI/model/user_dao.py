@@ -54,5 +54,5 @@ class UserDao:
       AND follow_user_id = :unfollow
     """),{
       'id':user_id,
-      'follow':unfollow_id
+      'unfollow':unfollow_id
     }).rowcount
