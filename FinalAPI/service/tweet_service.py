@@ -10,3 +10,6 @@ class TweetService:
 
   def timeline(self, user_id):
     return self.tweet_dao.get_timeline(user_id)
+
+  def get_timeline(self, user_id):
+    return self.tweet_dao.get_timeline(user_id)

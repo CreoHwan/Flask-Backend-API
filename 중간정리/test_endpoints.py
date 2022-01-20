@@ -89,7 +89,7 @@ def test_login(api):
 def test_unauthorized(api):
   resp = api.post(
     '/tweet',
-    data = json.dumps({'tweet':'fitst tweet'}),
+    data = json.dumps({'tweet':'first tweet'}),
     content_type = 'application/json'
   )
   assert resp.status_code == 401

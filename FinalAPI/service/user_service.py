@@ -31,7 +31,8 @@ class UserService:
       'user_id':user_id,
       'exp':datetime.utcnow() + timedelta(seconds = 60*60*24)
     }
-    token = jwt.encode(payload, self.config['JWT_SECRET_KEY'], 'HS256')
+    try: token = jwt.encode(payload, self.config.JWT_SECRET_KEY, 'HS256')
+    except: token = jwt.encode(payload, self.config['JWT_SECRET_KEY'], 'HS256')
     return token.encode('UTF-8').decode('UTF-8')
 
   def follow(self, user_id, follow_id):
