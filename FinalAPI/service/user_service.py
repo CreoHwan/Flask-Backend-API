@@ -1,5 +1,6 @@
 import jwt
 import bcrypt
+import os
 from datetime import datetime, timedelta
 
 
@@ -31,8 +32,8 @@ class UserService:
       'user_id':user_id,
       'exp':datetime.utcnow() + timedelta(seconds = 60*60*24)
     }
-    try: token = jwt.encode(payload, self.config.JWT_SECRET_KEY, 'HS256')
-    except: token = jwt.encode(payload, self.config['JWT_SECRET_KEY'], 'HS256')
+    try: token = jwt.encode(payload, self.config['JWT_SECRET_KEY'], 'HS256')
+    except: token = jwt.encode(payload, self.config.JWT_SECRET_KEY, 'HS256') #except는 pytest 에서 test_service에서 try 구문을 하면, jwt secret key를 찾을 수 없다고 한다. 뭔가 create_app 과 관련이 있는 듯하다.
     return token.encode('UTF-8').decode('UTF-8')
 
   def follow(self, user_id, follow_id):
@@ -40,3 +41,13 @@ class UserService:
 
   def unfollow(self, user_id, unfollow_id):
     return self.user_dao.insert_unfollow(user_id, unfollow_id)
+
+  def save_profile_picture(self, picture, filename, user_id):
+    try: profile_pic_path_and_name = os.path.join(self.config['UPLOAD_DIRECTORY'], filename)
+    except: profile_pic_path_and_name = os.path.join(self.config.UPLOAD_DIRECTORY, filename)
+    picture.save(profile_pic_path_and_name)
+
+    return self.user_dao.save_profile_picture(profile_pic_path_and_name, user_id)
+
+  def get_profile_picture(self, user_id):
+    return self.user_dao.get_profile_picture(user_id)

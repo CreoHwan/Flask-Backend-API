@@ -1,22 +1,19 @@
-
-import jwt
 import bcrypt
 import pytest
 import config
 
-from model      import UserDao, TweetDao
-from service    import UserService, TweetService
+from model import UserDao, TweetDao
 from sqlalchemy import create_engine, text
 
-database = create_engine(config.test_config['DB_URL'], encoding= 'utf-8', max_overflow = 0)
+database = create_engine(config.test_config['DB_URL'], encoding = 'utf-8', max_overflow=0)
 
 @pytest.fixture
-def user_service():
-    return UserService(UserDao(database), config)
+def user_dao():
+    return UserDao(database)
 
 @pytest.fixture
-def tweet_service():
-    return TweetService(TweetDao(database))
+def tweet_dao():
+    return TweetDao(database)
 
 def setup_function():
     ## Create a test user
@@ -55,12 +52,13 @@ def setup_function():
         )
     """), new_users)
 
-    ## User 2 의 트윗 미리 생성해 놓기
+  
+  ## User 2 의 트윗 미리 생성해 놓기
     database.execute(text("""
         INSERT INTO tweets (
             user_id,
             tweet
-        ) VALUES (
+            ) VALUES (
             2,
             "Hello World!"
         )
@@ -104,60 +102,58 @@ def get_follow_list(user_id):
 
     return [int(row['id']) for row in rows]
 
-def test_create_new_user(user_service):
+
+def test_insert_user(user_dao):
     new_user = {
         'name'     : '홍길동',
         'email'    : 'hong@test.com',
-        'profile'  : '동쪽에서 번쩍, 서쪽에서 번쩍',
+        'profile'  : '서쪽에서 번쩍, 동쪽에서 번쩍',
         'password' : 'test1234'
-    }
+    } 
 
-    new_user_id  = user_service.create_new_user(new_user)
-    created_user = get_user(new_user_id)
+    new_user_id = user_dao.insert_user(new_user)
+    user        = get_user(new_user_id)
 
-    assert created_user == {
+    assert user == {
         'id'      : new_user_id,
         'name'    : new_user['name'],
-        'profile' : new_user['profile'],
         'email'   : new_user['email'],
+        'profile' : new_user['profile']
     }
 
-def test_login(user_service):
-    ## 이미 생성되어 있는 유저의 이메일과 비밀번호를 사용해서 로그인을 시도.
-    assert user_service.login({
-        'email'    : 'songew@gmail.com',
-        'password' : 'test password'
-    })
+def test_get_user_id_and_password(user_dao):
+    ## get_user_id_and_password 메소드를 호출 하여 유저의 아이디와 비밀번호 해시 값을 읽어들인다.
+    ## 유저는 이미 setup_function 에서 생성된 유저를 사용한다.
+    user_credential = user_dao.get_user_id_and_password('songew@gmail.com')
 
-    ## 잘못된 비번으로 로그인 했을때 False가 리턴되는지 테스트
-    assert not user_service.login({
-        'email'    : 'songew@gmail.com',
-        'password' : 'test1234'
-    })
+    ## 먼저 유저 아이디가 맞는지 확인한다.
+    assert user_credential['id'] == 1
 
-def test_generate_access_token(user_service):
-    ## token 생성후 decode 해서 동일한 유저 아이디가 나오는지 테스트
-    token   = user_service.generate_access_token(1)
-    payload = jwt.decode(token, config.JWT_SECRET_KEY, 'HS256')
+    ## 그리고 유저 비밀번호가 맞는지 bcrypt의 checkpw 메소드를 사용해서 확인 한다.
+    assert bcrypt.checkpw('test password'.encode('UTF-8'), user_credential['hashed_password'].encode('UTF-8'))
 
-    assert payload['user_id'] == 1
+def test_insert_follow(user_dao):
+    ## insert_follow 메소드를 사용하여 유저 1이 유저 2를 팔로우 하도록 한다.
+    ## 유저 1과 2는 setup_function에서 이미 생성 되었다.
+    user_dao.insert_follow(user_id = 1, follow_id = 2)
 
-def test_follow(user_service):
-    user_service.follow(1, 2)
     follow_list = get_follow_list(1)
 
     assert follow_list == [2]
 
-def test_unfollow(user_service):
-    user_service.follow(1, 2)
-    user_service.unfollow(1, 2)
+def test_insert_unfollow(user_dao):
+    ## insert_follow 메소드를 사용하여 유저 1이 유저 2를 팔로우 한 후 언팔로우 한다.
+    ## 유저 1과 2는 setup_function에서 이미 생성 되었다.
+    user_dao.insert_follow(user_id = 1, follow_id = 2)
+    user_dao.insert_unfollow(user_id = 1, unfollow_id = 2)
+
     follow_list = get_follow_list(1)
 
     assert follow_list == [ ]
 
-def test_tweet(tweet_service):
-    tweet_service.tweet(1, "tweet test")
-    timeline = tweet_service.get_timeline(1)
+def test_insert_tweet(tweet_dao):
+    tweet_dao.insert_tweet(1, "tweet test")
+    timeline = tweet_dao.get_timeline(1)
 
     assert timeline == [
         {
@@ -166,12 +162,12 @@ def test_tweet(tweet_service):
         } 
     ]
 
-def test_timeline(user_service, tweet_service):
-    tweet_service.tweet(1, "tweet test")
-    tweet_service.tweet(2, "tweet test 2")
-    user_service.follow(1, 2)
+def test_timeline(user_dao, tweet_dao):
+    tweet_dao.insert_tweet(1, "tweet test")
+    tweet_dao.insert_tweet(2, "tweet test 2")
+    user_dao.insert_follow(1, 2)
 
-    timeline = tweet_service.get_timeline(1)
+    timeline = tweet_dao.get_timeline(1)
 
     assert timeline == [
         {
@@ -187,3 +183,18 @@ def test_timeline(user_service, tweet_service):
             'tweet'   : 'tweet test 2'
         }
     ]
+
+def test_save_and_get_profile_picture(user_dao):
+    ## 먼저 profile picture를 읽어들이도록 하자.
+    ## 저장한 profile picture 가 없음으로 None이 나와야 한다.
+    user_id = 1
+    user_profile_picture = user_dao.get_profile_picture(user_id)
+    assert user_profile_picture is None
+
+    ## Profile picture url을 저장하자
+    expected_profile_picture = "/home/junghwan/Projects/api/pic/jocker.jpg"
+    user_dao.save_profile_picture(expected_profile_picture, user_id)
+
+    ## Profile picture url을 읽어들이자
+    actual_profile_picture = user_dao.get_profile_picture(user_id)
+    assert expected_profile_picture == actual_profile_picture

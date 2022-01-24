@@ -5,13 +5,15 @@ import config
 
 from app import create_app
 from sqlalchemy import create_engine, text
+from unittest import mock
+import io
 
 database = create_engine(config.test_config['DB_URL'], encoding= 'utf-8', max_overflow = 0)
 
 @pytest.fixture
 def api():
     app = create_app(config.test_config)
-    app.config['TESTING'] = True
+    app.config['TEST'] = True
     api = app.test_client()
 
     return api
@@ -230,7 +232,7 @@ def test_unfollow(api):
     assert resp.status_code == 200
 
      ## 이제 유저 1의 tweet 확인 해서 유저 2의 tweet이 더 이상 리턴 되지 않는 것을 확인
-    resp   = api.get(f'/timeline/1')
+    resp   = api.get('/timeline/1')
     tweets = json.loads(resp.data.decode('utf-8'))
 
     assert resp.status_code == 200
@@ -238,4 +240,58 @@ def test_unfollow(api):
         'user_id'  : 1,
         'timeline' : [ ]
     }
+
+
+def test_save_and_get_profile_picture(api):
+    # 로그인
+    resp = api.post(
+        '/login',
+        data         = json.dumps({'email' : 'songew@gmail.com', 'password' : 'test password'}),
+        content_type = 'application/json'
+    )
+    resp_json    = json.loads(resp.data.decode('utf-8'))
+    access_token = resp_json['access_token']
     
+
+    # 이미지 파일 업로드
+    resp = api.post(
+        '/profile-picture',
+        content_type = 'multipart/form-data',
+        headers      = {'Authorization' : access_token},
+        data         = { 'profile_pic' : (io.BytesIO(b'some imagge here'),'test.png') }
+    )
+
+    assert resp.status_code == 200
+
+    # GET 이미지 URL
+    resp = api.get('/profile-picture/1')
+    data = resp.data.decode('utf-8')
+    
+    assert data == 'some imagge here'
+'''
+def test_save_and_get_profile_pictureads(api):
+    # 로그인
+    resp = api.post(
+        '/login',
+        data         = json.dumps({'email' : 'songew@gmail.com', 'password' : 'test password'}),
+        content_type = 'application/json'
+    )
+    resp_json    = json.loads(resp.data.decode('utf-8'))
+    access_token = resp_json['access_token']
+
+    # 이미지 파일 업로드
+    resp = api.post(
+        '/profile-picture',
+        content_type = 'multipart/form-data',
+        headers      = {'Authorization' : access_token},
+        data         = json.dumps({ 'profile_pic' : '@/home/junghwan/jocker.jpg'})
+    )
+    assert resp.data == ''
+    assert resp.status_code == 200
+
+    # GET 이미지 URL
+    resp = api.get('/profile-picture/1')
+    data = resp.data.decode('utf-8')
+    assert data == 'some imagge here'
+    '''
+
